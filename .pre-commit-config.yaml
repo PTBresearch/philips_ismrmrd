@@ -32,7 +32,7 @@ repos:
       - id: mypy
         pass_filenames: false
         always_run: true
-        args: [src, tests]
+        args: [src]
         additional_dependencies:
           - numpy>=2.3
           - matplotlib

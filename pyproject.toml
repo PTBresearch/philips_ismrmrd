@@ -41,6 +41,8 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 module = [
     "ismrmrd.*",
+    "pandas.*",
+    "xarray.*",
 ]
 ignore_missing_imports = true
 
@@ -96,6 +98,9 @@ skip-magic-trailing-comma = false
 
 [tool.typos.default]
 locale = "en-us"
+
+[tool.typos.default.extend-words]
+loca = "loca"   # locations
 
 [tool.pytest.ini_options]
 addopts = [

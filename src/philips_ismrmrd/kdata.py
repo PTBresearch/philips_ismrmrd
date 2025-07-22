@@ -1,42 +1,43 @@
-import numpy as np
-import pandas as pd
+"""Sort and process k-space data."""
+
 import re
-from collections import namedtuple
+
+import numpy as np
 import xarray as xr  # For named dims;
 
-from philips_ismrmrd.utils import _num_bytes_to_num_samples, DIMENSIONS_STD
 from philips_ismrmrd.reader import read_data_list
+from philips_ismrmrd.utils import DIMENSIONS_STD
+from philips_ismrmrd.utils import _num_bytes_to_num_samples
 
 
-def data_list_to_kspace(path_to_data_or_list,
-                        drop_dims=True,
-                        remove_readout_oversampling=False,
-                        offset_array=False):
-    # Read raw data and attributes
+def data_list_to_kspace(path_to_data_or_list, drop_dims=True, remove_readout_oversampling=False, offset_array=False):
+    """Read raw data and attributes."""
     samples_per_type, attributes_per_type, general_info = read_data_list(path_to_data_or_list)
 
-    samples = samples_per_type.get("STD")
-    attributes = attributes_per_type.get("STD")
+    samples = samples_per_type.get('STD')
+    attributes = attributes_per_type.get('STD')
 
     kspace = samples_to_kspace(
-        samples, attributes, general_info,
+        samples,
+        attributes,
+        general_info,
         drop_dims=drop_dims,
         remove_readout_oversampling=remove_readout_oversampling,
-        offset_array=offset_array
+        offset_array=offset_array,
     )
 
     return kspace
 
 
-def samples_to_kspace(samples, attributes, general_info,
-                      drop_dims=True,
-                      remove_readout_oversampling=False,
-                      offset_array=False):
-    if not all(attributes['typ'] == "STD"):
+def samples_to_kspace(
+    samples, attributes, general_info, drop_dims=True, remove_readout_oversampling=False, offset_array=False
+):
+    """Convert samples and attributes to k-space."""
+    if not all(attributes['typ'] == 'STD'):
         raise ValueError("All attributes must be type 'STD'.")
 
     if not _all_readouts_same_size(attributes):
-        raise ValueError("All readouts must have the same size.")
+        raise ValueError('All readouts must have the same size.')
 
     kspace = _samples_to_kspace(samples, attributes)
 
@@ -56,11 +57,11 @@ def samples_to_kspace(samples, attributes, general_info,
 
 def _samples_to_kspace(samples, attributes):
     # Check again if needed
-    if not all(attributes['typ'] == "STD"):
+    if not all(attributes['typ'] == 'STD'):
         raise ValueError("Attributes must be type 'STD'.")
 
     if not _all_readouts_same_size(attributes):
-        raise ValueError("Readouts must have the same size.")
+        raise ValueError('Readouts must have the same size.')
 
     ranges = _calculate_kspace_dimension_ranges(attributes)
     kspace = _allocate_kspace(ranges)
@@ -83,8 +84,8 @@ def _calculate_kspace_dimension_ranges(attributes):
 
     ranges = {}
     for dim in DIMENSIONS_STD:
-        if dim == "kx":
-            ranges["kx"] = range_kx
+        if dim == 'kx':
+            ranges['kx'] = range_kx
         else:
             min_val = attributes[dim].min()
             max_val = attributes[dim].max()
@@ -99,9 +100,7 @@ def _allocate_kspace(ranges):
 
     # Create a DataArray with dims and coords
     coords = {dim: ranges[dim] for dim in DIMENSIONS_STD}
-    kspace = xr.DataArray(np.zeros(shape, dtype=np.complex64),
-                          dims=DIMENSIONS_STD,
-                          coords=coords)
+    kspace = xr.DataArray(np.zeros(shape, dtype=np.complex64), dims=DIMENSIONS_STD, coords=coords)
 
     return kspace
 
@@ -113,33 +112,33 @@ def _fill_kspace(kspace, samples, attributes):
     samples = np.reshape(samples, (kx_len, num_readouts))
 
     if attributes.shape[0] != samples.shape[1]:
-        raise ValueError("Mismatch between number of readouts and samples.")
+        raise ValueError('Mismatch between number of readouts and samples.')
 
-    print("Sorting data into k-space...")
+    print('Sorting data into k-space...')
 
     for i in range(num_readouts):
         # Extract indices for current readout (all dims except kx)
-        idx = tuple(attributes.iloc[i][dim] for dim in DIMENSIONS_STD if dim != "kx")
+        idx = tuple(attributes.iloc[i][dim] for dim in DIMENSIONS_STD if dim != 'kx')
 
         # Insert samples[:, i] at the index in kspace
         # xarray supports .loc for indexing by coordinate values
-        kspace.loc[dict(zip(DIMENSIONS_STD[1:], idx))][:] = samples[:, i]
+        kspace.loc[dict(zip(DIMENSIONS_STD[1:], idx, strict=False))][:] = samples[:, i]
 
     # TODO: handle :sign multiplication if needed
 
 
 def _extract_readout_oversampling_factor(general_info):
     for line in general_info:
-        if "kx_oversample_factor" in line:
-            match = re.search(r"(\d+\.\d+)", line)
+        if 'kx_oversample_factor' in line:
+            match = re.search(r'(\d+\.\d+)', line)
             if match:
                 val = float(match.group(1))
                 if not np.isclose(val, round(val)):
-                    raise ValueError(f"Oversampling factor {val} not an integer.")
+                    raise ValueError(f'Oversampling factor {val} not an integer.')
                 return int(round(val))
             else:
-                raise ValueError(f"Could not parse oversampling factor from line: {line}")
-    raise ValueError("kx_oversample_factor not found in general info.")
+                raise ValueError(f'Could not parse oversampling factor from line: {line}')
+    raise ValueError('kx_oversample_factor not found in general info.')
 
 
 def _remove_readout_oversampling(kspace, oversampling_factor):
@@ -168,9 +167,7 @@ def _remove_readout_oversampling(kspace, oversampling_factor):
     coords['kx'] = new_kx
     new_dims = kspace.dims
 
-    new_kspace = xr.DataArray(cropped_kspace.astype(np.complex64),
-                             dims=new_dims,
-                             coords=coords)
+    new_kspace = xr.DataArray(cropped_kspace.astype(np.complex64), dims=new_dims, coords=coords)
 
     return new_kspace
 
@@ -178,6 +175,6 @@ def _remove_readout_oversampling(kspace, oversampling_factor):
 def _remove_custom_indices_keep_nameddims(kspace):
     # Strip custom coords and reset to default zero-based indices but keep dims and shape
     shape = kspace.shape
-    new_coords = {dim: np.arange(size) for dim, size in zip(kspace.dims, shape)}
+    new_coords = {dim: np.arange(size) for dim, size in zip(kspace.dims, shape, strict=False)}
     new_kspace = xr.DataArray(kspace.data.copy(), dims=kspace.dims, coords=new_coords)
     return new_kspace

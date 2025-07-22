@@ -1,19 +1,29 @@
-import os
+"""Read data and header information from raw file."""
 
-from philips_ismrmrd.utils import _preallocate_samples, _read_and_store_samples_per_type, _split_attributes_per_type, _remove_empty_fields, _validate_path, _extract_general_info, _extract_attributes
+from pathlib import Path
+
+from philips_ismrmrd.utils import _extract_attributes
+from philips_ismrmrd.utils import _extract_general_info
+from philips_ismrmrd.utils import _preallocate_samples
+from philips_ismrmrd.utils import _read_and_store_samples_per_type
+from philips_ismrmrd.utils import _remove_empty_fields
+from philips_ismrmrd.utils import _split_attributes_per_type
+from philips_ismrmrd.utils import _validate_path
+
 
 def read_data_list(path_to_data_or_list: str, remove_empty_fields: bool = True):
+    """Read data and attributes from a .data/.list file pair."""
     # Remove extension from path if any
-    path, _ = os.path.splitext(path_to_data_or_list)
+    path = str(Path(path_to_data_or_list).parent / Path(path_to_data_or_list).stem)
 
     # Read the .list file to get attributes and general info
-    attributes, info = _read_list_file(f"{path}.list")
+    attributes, info = _read_list_file(f'{path}.list')
 
     # Preallocate arrays for samples per type
     samples_per_type = _preallocate_samples(attributes)
 
     # Read and store samples from .data file
-    _read_and_store_samples_per_type(samples_per_type, f"{path}.data", attributes)
+    _read_and_store_samples_per_type(samples_per_type, f'{path}.data', attributes)
 
     # Split attributes DataFrame into separate DataFrames per type
     attributes_per_type = _split_attributes_per_type(attributes)
@@ -27,10 +37,10 @@ def read_data_list(path_to_data_or_list: str, remove_empty_fields: bool = True):
 
 def _read_list_file(path_to_list_file: str):
     # Validate that the file exists, is non-empty, and has .list extension
-    _validate_path(path_to_list_file, ".list")
+    _validate_path(path_to_list_file, '.list')
 
     # Read all lines from the .list file
-    with open(path_to_list_file, "r") as f:
+    with Path(path_to_list_file).open() as f:
         list_lines = f.readlines()
 
     list_lines = [line.rstrip('\n') for line in list_lines]
